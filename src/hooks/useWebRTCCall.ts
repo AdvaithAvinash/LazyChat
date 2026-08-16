@@ -1,11 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
-} from 'react-native-webrtc';
 
 import {
   addIceCandidate,
@@ -18,12 +11,12 @@ import {
 } from '@/services/callService';
 import type { Call, CallType } from '@/types';
 
-const ICE_SERVERS = [
+const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   // For production, add a TURN server here (e.g. Twilio/Metered) so calls
-  // work across restrictive NATs/carrier networks — public STUN alone isn't
-  // enough for a meaningful fraction of real-world connections.
+  // work across restrictive NATs/corporate firewalls — public STUN alone
+  // isn't enough for a meaningful fraction of real-world connections.
 ];
 
 type Params = {
@@ -37,6 +30,8 @@ type Params = {
 
 type ConnectionState = 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed';
 
+/** Browser-native WebRTC — RTCPeerConnection, RTCSessionDescription, etc.
+ * are all standard DOM globals here, no react-native-webrtc needed. */
 export function useWebRTCCall({
   callId: initialCallId,
   peerId,
@@ -67,7 +62,7 @@ export function useWebRTCCall({
     let cancelled = false;
 
     async function start() {
-      const stream = await mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: type === 'video' ? { facingMode: 'user' } : false,
       });
@@ -81,7 +76,7 @@ export function useWebRTCCall({
       pcRef.current = pc;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      pc.ontrack = (event: { streams: MediaStream[] }) => {
+      pc.ontrack = (event) => {
         setRemoteStream(event.streams[0]);
         setConnectionState('connected');
       };
@@ -99,37 +94,37 @@ export function useWebRTCCall({
         setCallId(newCallId);
         setConnectionState('ringing');
 
-        pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
+        pc.onicecandidate = (event) => {
           if (event.candidate) addIceCandidate(newCallId, currentUserId, event.candidate.toJSON());
         };
 
-        const offer = await pc.createOffer({});
+        const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         await setCallOffer(newCallId, { sdp: offer.sdp ?? '', type: offer.type ?? 'offer' });
 
         const unsubCall = subscribeToCallDoc(newCallId, async (call: Call | null) => {
           if (!call?.answer || pc.remoteDescription) return;
-          await pc.setRemoteDescription(new RTCSessionDescription(call.answer as RTCSessionDescription));
+          await pc.setRemoteDescription(new RTCSessionDescription(call.answer as RTCSessionDescriptionInit));
         });
 
         const unsubCandidates = subscribeToIceCandidates(newCallId, currentUserId, (candidate) => {
-          pc.addIceCandidate(new RTCIceCandidate(candidate as unknown as RTCIceCandidate));
+          pc.addIceCandidate(new RTCIceCandidate(candidate as RTCIceCandidateInit));
         });
 
         unsubscribersRef.current.push(unsubCall, unsubCandidates);
       } else if (initialCallId) {
-        pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
+        pc.onicecandidate = (event) => {
           if (event.candidate) addIceCandidate(initialCallId, currentUserId, event.candidate.toJSON());
         };
 
         const unsubCandidates = subscribeToIceCandidates(initialCallId, currentUserId, (candidate) => {
-          pc.addIceCandidate(new RTCIceCandidate(candidate as unknown as RTCIceCandidate));
+          pc.addIceCandidate(new RTCIceCandidate(candidate as RTCIceCandidateInit));
         });
         unsubscribersRef.current.push(unsubCandidates);
 
         const unsubCall = subscribeToCallDoc(initialCallId, async (call: Call | null) => {
           if (!call?.offer || pc.remoteDescription) return;
-          await pc.setRemoteDescription(new RTCSessionDescription(call.offer as RTCSessionDescription));
+          await pc.setRemoteDescription(new RTCSessionDescription(call.offer as RTCSessionDescriptionInit));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           await setCallAnswer(initialCallId, { sdp: answer.sdp ?? '', type: answer.type ?? 'answer' });

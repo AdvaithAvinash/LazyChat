@@ -12,7 +12,6 @@ export function profileRowToUserProfile(row: ProfileRow): UserProfile {
     photoURL: row.avatar_url,
     about: row.about,
     createdAt: row.created_at,
-    expoPushTokens: row.expo_push_tokens,
   };
 }
 
@@ -43,25 +42,23 @@ export async function searchUsers(query: string, excludeUid: string): Promise<Us
   return (data ?? []).map(profileRowToUserProfile);
 }
 
-export async function addExpoPushToken(uid: string, token: string): Promise<void> {
-  const { data, error } = await supabase.from('profiles').select('expo_push_tokens').eq('id', uid).single();
-  if (error) throw error;
-  if (data.expo_push_tokens.includes(token)) return;
+export type PushSubscriptionKeys = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+};
 
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({ expo_push_tokens: [...data.expo_push_tokens, token] })
-    .eq('id', uid);
-  if (updateError) throw updateError;
+export async function savePushSubscription(uid: string, subscription: PushSubscriptionKeys): Promise<void> {
+  const { error } = await supabase
+    .from('push_subscriptions')
+    .upsert(
+      { user_id: uid, endpoint: subscription.endpoint, p256dh: subscription.p256dh, auth: subscription.auth },
+      { onConflict: 'endpoint' }
+    );
+  if (error) throw error;
 }
 
-export async function removeExpoPushToken(uid: string, token: string): Promise<void> {
-  const { data, error } = await supabase.from('profiles').select('expo_push_tokens').eq('id', uid).single();
+export async function removePushSubscription(endpoint: string): Promise<void> {
+  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
   if (error) throw error;
-
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({ expo_push_tokens: data.expo_push_tokens.filter((t) => t !== token) })
-    .eq('id', uid);
-  if (updateError) throw updateError;
 }

@@ -1,15 +1,11 @@
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
-
-import { colors } from '@/theme/colors';
-
 type Props = {
   name: string;
   photoURL?: string | null;
   size?: number;
+  className?: string;
 };
 
-export default function Avatar({ name, photoURL, size = 48 }: Props) {
+export default function Avatar({ name, photoURL, size = 48, className = '' }: Props) {
   const initials = name
     .split(' ')
     .filter(Boolean)
@@ -17,25 +13,26 @@ export default function Avatar({ name, photoURL, size = 48 }: Props) {
     .map((part) => part[0]?.toUpperCase())
     .join('');
 
-  const dimensionStyle = { width: size, height: size, borderRadius: size / 2 };
+  const dimension = { width: size, height: size, fontSize: size * 0.38 };
 
   if (photoURL) {
-    return <Image source={{ uri: photoURL }} style={[styles.image, dimensionStyle]} />;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- avatars are user-uploaded, external URLs unknown to next/image at build time
+      <img
+        src={photoURL}
+        alt={name}
+        style={dimension}
+        className={`rounded-full object-cover bg-surface-alt ${className}`}
+      />
+    );
   }
 
   return (
-    <View style={[styles.placeholder, dimensionStyle]}>
-      <Text style={[styles.initials, { fontSize: size * 0.38 }]}>{initials || '?'}</Text>
-    </View>
+    <div
+      style={dimension}
+      className={`flex items-center justify-center rounded-full bg-primary-muted text-text font-semibold ${className}`}
+    >
+      {initials || '?'}
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  image: { backgroundColor: colors.surfaceAlt },
-  placeholder: {
-    backgroundColor: colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  initials: { color: colors.text, fontWeight: '600' },
-});

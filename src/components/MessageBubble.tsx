@@ -1,8 +1,6 @@
-import React from 'react';
-import { Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+'use client';
 
 import type { Message } from '@/types';
-import { colors } from '@/theme/colors';
 import { formatTimestamp } from '@/utils/format';
 
 type Props = {
@@ -18,74 +16,47 @@ const statusIcon: Record<Message['status'], string> = {
 
 export default function MessageBubble({ message, isOwn }: Props) {
   return (
-    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
-      <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
+    <div className={`flex px-3 py-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 ${
+          isOwn ? 'rounded-br-md bg-bubble-outgoing' : 'rounded-bl-md bg-bubble-incoming'
+        }`}
+      >
         <MessageContent message={message} />
-        <View style={styles.meta}>
-          <Text style={styles.time}>{formatTimestamp(message.createdAt)}</Text>
+        <div className="mt-1 flex items-center justify-end gap-1">
+          <span className="text-[11px] text-white/60">{formatTimestamp(message.createdAt)}</span>
           {isOwn ? (
-            <Text style={[styles.status, message.status === 'read' && styles.statusRead]}>
+            <span className={`text-[11px] ${message.status === 'read' ? 'text-[#7FD8A0]' : 'text-white/60'}`}>
               {statusIcon[message.status]}
-            </Text>
+            </span>
           ) : null}
-        </View>
-      </View>
-    </View>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function MessageContent({ message }: { message: Message }) {
   if (message.type === 'image' && message.mediaUrl) {
-    return <Image source={{ uri: message.mediaUrl }} style={styles.image} resizeMode="cover" />;
+    // eslint-disable-next-line @next/next/no-img-element -- user-uploaded chat media, not a known static asset
+    return <img src={message.mediaUrl} alt="" className="mb-1 max-h-72 w-full max-w-xs rounded-lg object-cover" />;
   }
 
   if (message.type === 'video' && message.mediaUrl) {
     return (
-      <TouchableOpacity onPress={() => Linking.openURL(message.mediaUrl as string)}>
-        <View style={styles.filePill}>
-          <Text style={styles.fileText}>🎬 {message.fileName ?? 'Video'}</Text>
-        </View>
-      </TouchableOpacity>
+      <a href={message.mediaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 py-1 text-sm text-text">
+        🎬 {message.fileName ?? 'Video'}
+      </a>
     );
   }
 
   if ((message.type === 'file' || message.type === 'audio') && message.mediaUrl) {
     return (
-      <TouchableOpacity onPress={() => Linking.openURL(message.mediaUrl as string)}>
-        <View style={styles.filePill}>
-          <Text style={styles.fileText}>
-            {message.type === 'audio' ? '🎤' : '📎'} {message.fileName ?? 'Attachment'}
-          </Text>
-        </View>
-      </TouchableOpacity>
+      <a href={message.mediaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 py-1 text-sm text-text">
+        {message.type === 'audio' ? '🎤' : '📎'} {message.fileName ?? 'Attachment'}
+      </a>
     );
   }
 
-  return <Text style={styles.text}>{message.text}</Text>;
+  return <p className="whitespace-pre-wrap break-words text-[15px] text-text">{message.text}</p>;
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', marginVertical: 4, paddingHorizontal: 12 },
-  rowOwn: { justifyContent: 'flex-end' },
-  rowOther: { justifyContent: 'flex-start' },
-  bubble: {
-    maxWidth: '78%',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  bubbleOwn: { backgroundColor: colors.bubbleOutgoing, borderBottomRightRadius: 4 },
-  bubbleOther: { backgroundColor: colors.bubbleIncoming, borderBottomLeftRadius: 4 },
-  text: { color: colors.text, fontSize: 15 },
-  image: { width: 220, height: 220, borderRadius: 10, marginBottom: 4 },
-  filePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  fileText: { color: colors.text, fontSize: 14 },
-  meta: { flexDirection: 'row', alignSelf: 'flex-end', marginTop: 4, alignItems: 'center' },
-  time: { color: 'rgba(244,246,251,0.6)', fontSize: 11 },
-  status: { color: 'rgba(244,246,251,0.6)', fontSize: 11, marginLeft: 4 },
-  statusRead: { color: '#7FD8A0' },
-});

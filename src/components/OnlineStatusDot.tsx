@@ -1,41 +1,28 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+'use client';
+
+import { useEffect, useState } from 'react';
 
 import { subscribeToPresence } from '@/services/presenceService';
-import { colors } from '@/theme/colors';
 
 type Props = {
   uid: string;
   size?: number;
+  className?: string;
 };
 
-export default function OnlineStatusDot({ uid, size = 12 }: Props) {
+export default function OnlineStatusDot({ uid, size = 12, className = '' }: Props) {
   const [online, setOnline] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = subscribeToPresence(uid, (presence) => setOnline(presence.state === 'online'));
-    return unsubscribe;
+    return subscribeToPresence(uid, (presence) => setOnline(presence.state === 'online'));
   }, [uid]);
 
   if (!online) return null;
 
   return (
-    <View
-      style={[
-        styles.dot,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
+    <span
+      style={{ width: size, height: size }}
+      className={`absolute bottom-0 right-0 rounded-full border-2 border-background bg-success ${className}`}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  dot: {
-    backgroundColor: colors.success,
-    borderWidth: 2,
-    borderColor: colors.background,
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-  },
-});

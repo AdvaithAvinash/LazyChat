@@ -5,7 +5,6 @@ export type UserProfile = {
   photoURL: string | null;
   about: string;
   createdAt: string;
-  expoPushTokens: string[];
 };
 
 export type PresenceState = 'online' | 'offline';

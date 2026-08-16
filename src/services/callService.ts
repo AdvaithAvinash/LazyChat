@@ -133,5 +133,7 @@ export function subscribeToIncomingCalls(uid: string, onIncoming: (call: Call) =
     )
     .subscribe();
 
-  return () => supabase.removeChannel(channel);
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }

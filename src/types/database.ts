@@ -17,7 +17,6 @@ export type Database = {
           display_name: string;
           avatar_url: string | null;
           about: string;
-          expo_push_tokens: string[];
           created_at: string;
         };
         Insert: {
@@ -26,9 +25,27 @@ export type Database = {
           display_name?: string;
           avatar_url?: string | null;
           about?: string;
-          expo_push_tokens?: string[];
         };
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+        Relationships: [];
+      };
+      push_subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+        };
+        Update: Partial<Database['public']['Tables']['push_subscriptions']['Insert']>;
         Relationships: [];
       };
       chats: {

@@ -1,15 +1,28 @@
-// Supabase Edge Function: sends an Expo push notification whenever a new
-// chat message or call is inserted. Wire it up as a Database Webhook
-// (Database -> Webhooks in the Supabase dashboard) on INSERT for the
-// `messages` and `calls` tables, pointed at this function's URL — see
-// README.md for the exact steps. This is the piece that can't happen
-// purely on the client: sending a push requires calling Expo's push API
-// from a trusted server, not from the sender's own device.
+// Supabase Edge Function: sends a Web Push notification whenever a new chat
+// message or call is inserted. Wire it up as a Database Webhook (Database ->
+// Webhooks in the Supabase dashboard) on INSERT for the `messages` and
+// `calls` tables, pointed at this function's URL — see README.md. This is
+// the piece that can't happen purely on the client: Web Push requires
+// signing the request with the VAPID private key from a trusted server, not
+// from the sender's own browser.
 //
-// Deno / Supabase Edge Functions runtime — not part of the Expo app bundle.
+// Deno / Supabase Edge Functions runtime — not part of the Next.js app.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import webpush from 'npm:web-push@3.6.7';
 
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  // Service role key: required to read profiles/subscriptions across users,
+  // which RLS otherwise blocks. Only ever used server-side, never shipped
+  // to the app.
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+);
+
+webpush.setVapidDetails(
+  Deno.env.get('VAPID_SUBJECT') ?? 'mailto:admin@example.com',
+  Deno.env.get('VAPID_PUBLIC_KEY') ?? '',
+  Deno.env.get('VAPID_PRIVATE_KEY') ?? ''
+);
 
 type WebhookPayload = {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -17,23 +30,11 @@ type WebhookPayload = {
   record: Record<string, unknown>;
 };
 
-type ExpoPushMessage = {
-  to: string;
-  title: string;
-  body: string;
-  data?: Record<string, unknown>;
-  sound?: 'default';
-  priority?: 'high';
-  channelId?: string;
+type PushSubscriptionRow = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
 };
-
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  // Service role key: required to read profiles/chat_members across users,
-  // which RLS otherwise blocks. Only ever used server-side, never shipped
-  // to the app.
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
 
 function previewText(record: Record<string, unknown>): string {
   const type = record.type as string;
@@ -44,13 +45,27 @@ function previewText(record: Record<string, unknown>): string {
   return `📎 ${(record.file_name as string) ?? 'File'}`;
 }
 
-async function sendExpoPush(messages: ExpoPushMessage[]): Promise<void> {
-  if (messages.length === 0) return;
-  await fetch(EXPO_PUSH_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(messages),
-  });
+async function sendWebPush(
+  subscriptions: PushSubscriptionRow[],
+  payload: { title: string; body: string; data: Record<string, unknown> }
+): Promise<void> {
+  await Promise.all(
+    subscriptions.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          JSON.stringify(payload)
+        );
+      } catch (error) {
+        // A 404/410 means the subscription is stale (browser data cleared,
+        // permission revoked, etc.) — clean it up so future sends don't retry it.
+        const status = (error as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) {
+          await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+        }
+      }
+    })
+  );
 }
 
 async function handleNewMessage(record: Record<string, unknown>): Promise<void> {
@@ -64,53 +79,36 @@ async function handleNewMessage(record: Record<string, unknown>): Promise<void> 
   if (!members || members.length === 0) return;
 
   const recipientIds = members.map((m) => m.user_id as string);
-  const { data: recipients } = await supabase
-    .from('profiles')
-    .select('expo_push_tokens')
-    .in('id', recipientIds);
+  const { data: subscriptions } = await supabase
+    .from('push_subscriptions')
+    .select('endpoint, p256dh, auth')
+    .in('user_id', recipientIds);
+  if (!subscriptions || subscriptions.length === 0) return;
 
-  const tokens = (recipients ?? []).flatMap((r) => (r.expo_push_tokens as string[]) ?? []);
-  const title = (sender?.display_name as string) || 'New message';
-  const body = previewText(record);
-
-  await sendExpoPush(
-    tokens.map((to) => ({
-      to,
-      title,
-      body,
-      data: { type: 'message', chatId },
-      sound: 'default',
-      priority: 'high',
-      channelId: 'messages',
-    }))
-  );
+  await sendWebPush(subscriptions, {
+    title: (sender?.display_name as string) || 'New message',
+    body: previewText(record),
+    data: { type: 'message', chatId },
+  });
 }
 
 async function handleNewCall(record: Record<string, unknown>): Promise<void> {
   if (record.status !== 'ringing') return;
 
-  const calleeId = record.callee_id as string;
-  const { data: callee } = await supabase
-    .from('profiles')
-    .select('expo_push_tokens')
-    .eq('id', calleeId)
-    .single();
+  const { data: subscriptions } = await supabase
+    .from('push_subscriptions')
+    .select('endpoint, p256dh, auth')
+    .eq('user_id', record.callee_id as string);
+  if (!subscriptions || subscriptions.length === 0) return;
 
-  const tokens = (callee?.expo_push_tokens as string[]) ?? [];
   const callerName = (record.caller_name as string) || 'Someone';
   const type = record.type as string;
 
-  await sendExpoPush(
-    tokens.map((to) => ({
-      to,
-      title: `Incoming ${type} call`,
-      body: `${callerName} is calling you`,
-      data: { type: 'call', callId: record.id as string, callType: type },
-      sound: 'default',
-      priority: 'high',
-      channelId: 'messages',
-    }))
-  );
+  await sendWebPush(subscriptions, {
+    title: `Incoming ${type} call`,
+    body: `${callerName} is calling you`,
+    data: { type: 'call', callId: record.id as string, callType: type },
+  });
 }
 
 Deno.serve(async (req: Request) => {

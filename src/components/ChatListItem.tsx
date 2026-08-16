@@ -1,19 +1,19 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+'use client';
+
+import Link from 'next/link';
 
 import Avatar from '@/components/Avatar';
 import OnlineStatusDot from '@/components/OnlineStatusDot';
 import type { Chat } from '@/types';
-import { colors } from '@/theme/colors';
 import { formatTimestamp } from '@/utils/format';
 
 type Props = {
   chat: Chat;
   currentUserId: string;
-  onPress: () => void;
+  active: boolean;
 };
 
-export default function ChatListItem({ chat, currentUserId, onPress }: Props) {
+export default function ChatListItem({ chat, currentUserId, active }: Props) {
   const otherUserId = chat.participants.find((id) => id !== currentUserId);
   const isGroup = chat.type === 'group';
   const title = isGroup
@@ -23,60 +23,34 @@ export default function ChatListItem({ chat, currentUserId, onPress }: Props) {
   const unread = chat.unreadCount?.[currentUserId] ?? 0;
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress}>
-      <View style={styles.avatarWrap}>
+    <Link
+      href={`/chats/${chat.id}`}
+      className={`flex items-center gap-3 px-4 py-3 transition hover:bg-surface-alt ${active ? 'bg-surface-alt' : ''}`}
+    >
+      <div className="relative shrink-0">
         <Avatar name={title} photoURL={photoURL} />
         {!isGroup && otherUserId ? <OnlineStatusDot uid={otherUserId} /> : null}
-      </View>
+      </div>
 
-      <View style={styles.content}>
-        <View style={styles.row}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={styles.time}>{formatTimestamp(chat.lastMessage?.createdAt ?? chat.updatedAt)}</Text>
-        </View>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-semibold text-text">{title}</span>
+          <span className="shrink-0 text-xs text-text-muted">
+            {formatTimestamp(chat.lastMessage?.createdAt ?? chat.updatedAt)}
+          </span>
+        </div>
 
-        <View style={styles.row}>
-          <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>
-            {chat.lastMessage
-              ? `${chat.lastMessage.senderId === currentUserId ? 'You: ' : ''}${chat.lastMessage.text}`
-              : 'Say hi 👋'}
-          </Text>
+        <div className="mt-0.5 flex items-center justify-between gap-2">
+          <span className={`truncate text-sm ${unread > 0 ? 'font-medium text-text' : 'text-text-muted'}`}>
+            {chat.lastMessage ? `${chat.lastMessage.senderId === currentUserId ? 'You: ' : ''}${chat.lastMessage.text}` : 'Say hi 👋'}
+          </span>
           {unread > 0 ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
-            </View>
+            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-text">
+              {unread > 99 ? '99+' : unread}
+            </span>
           ) : null}
-        </View>
-      </View>
-    </TouchableOpacity>
+        </div>
+      </div>
+    </Link>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  avatarWrap: { position: 'relative', marginRight: 12 },
-  content: { flex: 1 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: colors.text, fontSize: 16, fontWeight: '600', flexShrink: 1 },
-  time: { color: colors.textMuted, fontSize: 12 },
-  preview: { color: colors.textMuted, fontSize: 14, flexShrink: 1, marginTop: 2 },
-  previewUnread: { color: colors.text, fontWeight: '500' },
-  badge: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  badgeText: { color: colors.text, fontSize: 11, fontWeight: '700' },
-});

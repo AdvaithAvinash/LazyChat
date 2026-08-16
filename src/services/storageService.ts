@@ -1,11 +1,5 @@
 import { supabase } from '@/config/supabase';
 
-export type PickedFile = {
-  uri: string;
-  name: string;
-  mimeType: string;
-};
-
 export type UploadResult = {
   url: string;
   mimeType: string;
@@ -27,17 +21,17 @@ function extensionFor(fileName: string): string {
 }
 
 /**
- * Uploads a locally-picked file into the `chat-media` bucket under the
- * current user's own folder (storage RLS requires the first path segment to
- * match auth.uid(), see supabase/migrations/0002_storage.sql) and returns
- * its public URL.
+ * Uploads a File (e.g. from an <input type="file"> or drag-and-drop) into
+ * the `chat-media` bucket under the current user's own folder (storage RLS
+ * requires the first path segment to match auth.uid(), see
+ * supabase/migrations/0002_storage.sql) and returns its public URL.
  */
-export async function uploadToStorage(uid: string, file: PickedFile): Promise<UploadResult> {
-  const arrayBuffer = await fetch(file.uri).then((res) => res.arrayBuffer());
+export async function uploadToStorage(uid: string, file: File): Promise<UploadResult> {
+  const mimeType = file.type || 'application/octet-stream';
   const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensionFor(file.name)}`;
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
-    contentType: file.mimeType,
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    contentType: mimeType,
     upsert: false,
   });
   if (error) throw error;
@@ -46,8 +40,8 @@ export async function uploadToStorage(uid: string, file: PickedFile): Promise<Up
 
   return {
     url: data.publicUrl,
-    mimeType: file.mimeType,
+    mimeType,
     fileName: file.name,
-    resourceType: resourceTypeFor(file.mimeType),
+    resourceType: resourceTypeFor(mimeType),
   };
 }
