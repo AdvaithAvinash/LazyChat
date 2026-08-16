@@ -1,5 +1,5 @@
 module.exports = {
   root: true,
   extends: ['expo'],
-  ignorePatterns: ['/functions/lib/**', '/android/**', '/ios/**'],
+  ignorePatterns: ['/supabase/functions/**', '/android/**', '/ios/**'],
 };

@@ -17,14 +17,14 @@ import { useAuth } from '@/context/AuthContext';
 import type { MainStackParamList } from '@/navigation/types';
 import { createOrUpdateUserProfile, signOut } from '@/services/authService';
 import { pickImageFromLibrary } from '@/services/mediaPickerService';
-import { uploadToCloudinary } from '@/services/storageService';
+import { uploadToStorage } from '@/services/storageService';
 import { unregisterPushNotifications } from '@/services/notificationService';
 import { colors } from '@/theme/colors';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 
 export default function ProfileScreen() {
-  const { profile, firebaseUser, refreshProfile } = useAuth();
+  const { profile, authUser, refreshProfile } = useAuth();
   const navigation = useNavigation<Nav>();
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
   const [about, setAbout] = useState(profile?.about ?? '');
@@ -33,11 +33,12 @@ export default function ProfileScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const handlePickPhoto = async () => {
+    if (!authUser) return;
     const file = await pickImageFromLibrary();
     if (!file) return;
     setUploadingPhoto(true);
     try {
-      const result = await uploadToCloudinary(file);
+      const result = await uploadToStorage(authUser.id, file);
       setPhotoURL(result.url);
     } finally {
       setUploadingPhoto(false);
@@ -45,10 +46,10 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
-    if (!firebaseUser) return;
+    if (!authUser) return;
     setSaving(true);
     try {
-      await createOrUpdateUserProfile(firebaseUser.uid, firebaseUser.phoneNumber ?? '', {
+      await createOrUpdateUserProfile(authUser.id, authUser.email ?? '', {
         displayName: displayName.trim(),
         about: about.trim(),
         photoURL,
@@ -61,7 +62,7 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = async () => {
-    if (firebaseUser) await unregisterPushNotifications(firebaseUser.uid).catch(() => undefined);
+    if (authUser) await unregisterPushNotifications(authUser.id).catch(() => undefined);
     await signOut();
   };
 
@@ -85,8 +86,8 @@ export default function ProfileScreen() {
       <Text style={styles.label}>About</Text>
       <TextInput style={styles.input} value={about} onChangeText={setAbout} placeholderTextColor={colors.textMuted} />
 
-      <Text style={styles.label}>Phone number</Text>
-      <Text style={styles.readonly}>{profile?.phoneNumber}</Text>
+      <Text style={styles.label}>Email</Text>
+      <Text style={styles.readonly}>{profile?.email}</Text>
 
       <TouchableOpacity style={styles.button} onPress={handleSave} disabled={saving}>
         {saving ? <ActivityIndicator color={colors.text} /> : <Text style={styles.buttonText}>Save changes</Text>}

@@ -9,8 +9,6 @@ import {
 
 import {
   addIceCandidate,
-  CALLEE_CANDIDATES,
-  CALLER_CANDIDATES,
   createCallDoc,
   setCallAnswer,
   setCallOffer,
@@ -102,7 +100,7 @@ export function useWebRTCCall({
         setConnectionState('ringing');
 
         pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
-          if (event.candidate) addIceCandidate(newCallId, CALLER_CANDIDATES, event.candidate.toJSON());
+          if (event.candidate) addIceCandidate(newCallId, currentUserId, event.candidate.toJSON());
         };
 
         const offer = await pc.createOffer({});
@@ -114,18 +112,18 @@ export function useWebRTCCall({
           await pc.setRemoteDescription(new RTCSessionDescription(call.answer as RTCSessionDescription));
         });
 
-        const unsubCandidates = subscribeToIceCandidates(newCallId, CALLEE_CANDIDATES, (candidate) => {
-          pc.addIceCandidate(new RTCIceCandidate(candidate as RTCIceCandidate));
+        const unsubCandidates = subscribeToIceCandidates(newCallId, currentUserId, (candidate) => {
+          pc.addIceCandidate(new RTCIceCandidate(candidate as unknown as RTCIceCandidate));
         });
 
         unsubscribersRef.current.push(unsubCall, unsubCandidates);
       } else if (initialCallId) {
         pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
-          if (event.candidate) addIceCandidate(initialCallId, CALLEE_CANDIDATES, event.candidate.toJSON());
+          if (event.candidate) addIceCandidate(initialCallId, currentUserId, event.candidate.toJSON());
         };
 
-        const unsubCandidates = subscribeToIceCandidates(initialCallId, CALLER_CANDIDATES, (candidate) => {
-          pc.addIceCandidate(new RTCIceCandidate(candidate as RTCIceCandidate));
+        const unsubCandidates = subscribeToIceCandidates(initialCallId, currentUserId, (candidate) => {
+          pc.addIceCandidate(new RTCIceCandidate(candidate as unknown as RTCIceCandidate));
         });
         unsubscribersRef.current.push(unsubCandidates);
 

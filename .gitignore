@@ -11,8 +11,6 @@ yarn-debug.*
 yarn-error.*
 .env
 .env.local
-GoogleService-Info.plist
-google-services.json
 *.orig.*
 .DS_Store
 *.jks
@@ -23,3 +21,5 @@ google-services.json
 .metro-health-check*
 .vscode/
 .idea/
+supabase/.branches/
+supabase/.temp/

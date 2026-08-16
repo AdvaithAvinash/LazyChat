@@ -1,11 +1,11 @@
 export type UserProfile = {
   uid: string;
-  phoneNumber: string;
+  email: string;
   displayName: string;
   photoURL: string | null;
   about: string;
-  createdAt: number;
-  fcmTokens: string[];
+  createdAt: string;
+  expoPushTokens: string[];
 };
 
 export type PresenceState = 'online' | 'offline';
@@ -22,17 +22,17 @@ export type Chat = {
   type: ChatType;
   participants: string[];
   participantDetails: Record<string, { displayName: string; photoURL: string | null }>;
-  groupName?: string;
+  groupName?: string | null;
   groupPhoto?: string | null;
   lastMessage: {
     text: string;
     senderId: string;
-    createdAt: number;
+    createdAt: string;
     type: MessageType;
   } | null;
   unreadCount?: Record<string, number>;
-  createdAt: number;
-  updatedAt: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type MessageType = 'text' | 'image' | 'file' | 'video' | 'audio';
@@ -47,7 +47,7 @@ export type Message = {
   mediaUrl: string | null;
   mediaType: string | null;
   fileName: string | null;
-  createdAt: number;
+  createdAt: string;
   status: MessageStatus;
   readBy: string[];
 };
@@ -62,7 +62,7 @@ export type Call = {
   calleeId: string;
   type: CallType;
   status: CallStatus;
-  createdAt: number;
-  offer?: { sdp: string; type: string };
-  answer?: { sdp: string; type: string };
+  createdAt: string;
+  offer?: { sdp: string; type: string } | null;
+  answer?: { sdp: string; type: string } | null;
 };

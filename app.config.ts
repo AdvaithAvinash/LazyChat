@@ -18,12 +18,10 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.lazychat.app',
-    googleServicesFile: './GoogleService-Info.plist',
     infoPlist: {
       NSCameraUsageDescription: 'LazyChat needs camera access to take photos and make video calls.',
       NSMicrophoneUsageDescription: 'LazyChat needs microphone access for voice and video calls.',
       NSPhotoLibraryUsageDescription: 'LazyChat needs photo library access to send images.',
-      NSContactsUsageDescription: 'LazyChat needs contacts access to help you find friends.',
     },
   },
   android: {
@@ -32,18 +30,9 @@ const config: ExpoConfig = {
       backgroundColor: '#0B1220',
     },
     package: 'com.lazychat.app',
-    googleServicesFile: './google-services.json',
-    permissions: [
-      'CAMERA',
-      'RECORD_AUDIO',
-      'READ_CONTACTS',
-      'POST_NOTIFICATIONS',
-      'INTERNET',
-      'ACCESS_NETWORK_STATE',
-    ],
+    permissions: ['CAMERA', 'RECORD_AUDIO', 'POST_NOTIFICATIONS', 'INTERNET', 'ACCESS_NETWORK_STATE'],
   },
   plugins: [
-    '@react-native-firebase/app',
     'expo-dev-client',
     [
       'expo-notifications',
@@ -67,10 +56,8 @@ const config: ExpoConfig = {
     ],
   ],
   extra: {
-    cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
-    cloudinaryUploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET ?? '',
-    cloudinaryApiBase: process.env.CLOUDINARY_API_BASE ?? 'https://api.cloudinary.com/v1_1',
-    firebaseDatabaseUrl: process.env.FIREBASE_DATABASE_URL ?? '',
+    supabaseUrl: process.env.SUPABASE_URL ?? '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? '',
     eas: {
       projectId: process.env.EAS_PROJECT_ID ?? 'REPLACE_WITH_EAS_PROJECT_ID',
     },

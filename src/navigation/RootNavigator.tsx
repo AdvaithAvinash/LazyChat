@@ -65,7 +65,7 @@ function MainStack() {
 }
 
 export default function RootNavigator() {
-  const { firebaseUser, loading, profileComplete } = useAuth();
+  const { authUser, loading, profileComplete } = useAuth();
 
   if (loading) {
     return (
@@ -77,7 +77,7 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer ref={navigationRef}>
-      {!firebaseUser ? <AuthFlow /> : !profileComplete ? <ProfileSetupScreen /> : <MainStack />}
+      {!authUser ? <AuthFlow /> : !profileComplete ? <ProfileSetupScreen /> : <MainStack />}
     </NavigationContainer>
   );
 }

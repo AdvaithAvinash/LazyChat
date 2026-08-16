@@ -1,13 +1,13 @@
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import type { User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import { fetchUserProfile, subscribeToAuthState } from '@/services/authService';
-import { startPresenceTracking } from '@/services/presenceService';
 import { registerForPushNotifications } from '@/services/notificationService';
+import { startPresenceTracking } from '@/services/presenceService';
 import type { UserProfile } from '@/types';
 
 type AuthContextValue = {
-  firebaseUser: FirebaseAuthTypes.User | null;
+  authUser: User | null;
   profile: UserProfile | null;
   loading: boolean;
   profileComplete: boolean;
@@ -17,15 +17,15 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribeAuth = subscribeToAuthState(async (user) => {
-      setFirebaseUser(user);
+      setAuthUser(user);
       if (user) {
-        const userProfile = await fetchUserProfile(user.uid);
+        const userProfile = await fetchUserProfile(user.id);
         setProfile(userProfile);
       } else {
         setProfile(null);
@@ -37,24 +37,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!firebaseUser) return undefined;
+    if (!authUser) return undefined;
 
-    const stopPresence = startPresenceTracking(firebaseUser.uid);
-    registerForPushNotifications(firebaseUser.uid).catch(() => undefined);
+    const stopPresence = startPresenceTracking(authUser.id);
+    registerForPushNotifications(authUser.id).catch(() => undefined);
 
     return stopPresence;
-  }, [firebaseUser]);
+  }, [authUser]);
 
   const refreshProfile = async () => {
-    if (!firebaseUser) return;
-    const userProfile = await fetchUserProfile(firebaseUser.uid);
+    if (!authUser) return;
+    const userProfile = await fetchUserProfile(authUser.id);
     setProfile(userProfile);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        firebaseUser,
+        authUser,
         profile,
         loading,
         profileComplete: Boolean(profile?.displayName),

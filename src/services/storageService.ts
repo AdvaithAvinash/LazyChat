@@ -1,4 +1,4 @@
-import { cloudinaryConfig, cloudinaryUploadUrl } from '@/config/cloudinary';
+import { supabase } from '@/config/supabase';
 
 export type PickedFile = {
   uri: string;
@@ -10,9 +10,10 @@ export type UploadResult = {
   url: string;
   mimeType: string;
   fileName: string;
-  bytes: number;
   resourceType: 'image' | 'video' | 'raw';
 };
+
+const BUCKET = 'chat-media';
 
 function resourceTypeFor(mimeType: string): 'image' | 'video' | 'raw' {
   if (mimeType.startsWith('image/')) return 'image';
@@ -20,67 +21,33 @@ function resourceTypeFor(mimeType: string): 'image' | 'video' | 'raw' {
   return 'raw';
 }
 
-/**
- * Uploads directly from the device to Cloudinary using an unsigned upload
- * preset (see README for how to create one) — no backend round trip needed.
- */
-export async function uploadToCloudinary(file: PickedFile, onProgress?: (pct: number) => void): Promise<UploadResult> {
-  if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
-    throw new Error('Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET.');
-  }
-
-  const resourceType = resourceTypeFor(file.mimeType);
-
-  const formData = new FormData();
-  formData.append('file', {
-    uri: file.uri,
-    name: file.name,
-    type: file.mimeType,
-  } as unknown as Blob);
-  formData.append('upload_preset', cloudinaryConfig.uploadPreset);
-
-  const response = await uploadWithProgress(cloudinaryUploadUrl(resourceType), formData, onProgress);
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Cloudinary upload failed (${response.status}): ${body}`);
-  }
-
-  const data = (await response.json()) as { secure_url: string; bytes: number };
-
-  return {
-    url: data.secure_url,
-    mimeType: file.mimeType,
-    fileName: file.name,
-    bytes: data.bytes,
-    resourceType,
-  };
+function extensionFor(fileName: string): string {
+  const parts = fileName.split('.');
+  return parts.length > 1 ? parts[parts.length - 1] : 'bin';
 }
 
-function uploadWithProgress(
-  url: string,
-  formData: FormData,
-  onProgress?: (pct: number) => void
-): Promise<Response> {
-  if (!onProgress) return fetch(url, { method: 'POST', body: formData });
+/**
+ * Uploads a locally-picked file into the `chat-media` bucket under the
+ * current user's own folder (storage RLS requires the first path segment to
+ * match auth.uid(), see supabase/migrations/0002_storage.sql) and returns
+ * its public URL.
+ */
+export async function uploadToStorage(uid: string, file: PickedFile): Promise<UploadResult> {
+  const arrayBuffer = await fetch(file.uri).then((res) => res.arrayBuffer());
+  const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensionFor(file.name)}`;
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-
-    xhr.onload = () => {
-      resolve(
-        new Response(xhr.responseText, {
-          status: xhr.status,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      );
-    };
-    xhr.onerror = () => reject(new Error('Network error during upload'));
-    xhr.send(formData);
+  const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
+    contentType: file.mimeType,
+    upsert: false,
   });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+
+  return {
+    url: data.publicUrl,
+    mimeType: file.mimeType,
+    fileName: file.name,
+    resourceType: resourceTypeFor(file.mimeType),
+  };
 }

@@ -1,14 +1,22 @@
-import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-
-import { FieldValue, firestoreDb } from '@/config/firebase';
+import { supabase } from '@/config/supabase';
 import type { Call, CallStatus, CallType } from '@/types';
+import type { Database } from '@/types/database';
 
-export const CALLER_CANDIDATES = 'callerCandidates';
-export const CALLEE_CANDIDATES = 'calleeCandidates';
+type CallRow = Database['public']['Tables']['calls']['Row'];
+type CandidateRow = Database['public']['Tables']['call_candidates']['Row'];
 
-function callFromDoc(doc: FirebaseFirestoreTypes.DocumentSnapshot): Call {
-  const data = doc.data() as Omit<Call, 'id'>;
-  return { id: doc.id, ...data };
+function callFromRow(row: CallRow): Call {
+  return {
+    id: row.id,
+    callerId: row.caller_id,
+    callerName: row.caller_name,
+    calleeId: row.callee_id,
+    type: row.type,
+    status: row.status,
+    createdAt: row.created_at,
+    offer: row.offer,
+    answer: row.answer,
+  };
 }
 
 export async function createCallDoc(
@@ -17,76 +25,113 @@ export async function createCallDoc(
   calleeId: string,
   type: CallType
 ): Promise<string> {
-  const ref = firestoreDb.collection('calls').doc();
-  await ref.set({
-    callerId,
-    callerName,
-    calleeId,
-    type,
-    status: 'ringing' satisfies CallStatus,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-  return ref.id;
+  const { data, error } = await supabase
+    .from('calls')
+    .insert({ caller_id: callerId, caller_name: callerName, callee_id: calleeId, type })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id;
 }
 
-export async function setCallOffer(
-  callId: string,
-  offer: { sdp: string; type: string }
-): Promise<void> {
-  await firestoreDb.collection('calls').doc(callId).set({ offer }, { merge: true });
+export async function setCallOffer(callId: string, offer: { sdp: string; type: string }): Promise<void> {
+  const { error } = await supabase.from('calls').update({ offer }).eq('id', callId);
+  if (error) throw error;
 }
 
-export async function setCallAnswer(
-  callId: string,
-  answer: { sdp: string; type: string }
-): Promise<void> {
-  await firestoreDb.collection('calls').doc(callId).set({ answer }, { merge: true });
+export async function setCallAnswer(callId: string, answer: { sdp: string; type: string }): Promise<void> {
+  const { error } = await supabase.from('calls').update({ answer }).eq('id', callId);
+  if (error) throw error;
 }
 
 export async function updateCallStatus(callId: string, status: CallStatus): Promise<void> {
-  await firestoreDb.collection('calls').doc(callId).set({ status }, { merge: true });
+  const { error } = await supabase.from('calls').update({ status }).eq('id', callId);
+  if (error) throw error;
 }
 
+/** Fetches the call once, then re-fetches on every update (offer/answer/status). */
 export function subscribeToCallDoc(callId: string, callback: (call: Call | null) => void) {
-  return firestoreDb
-    .collection('calls')
-    .doc(callId)
-    .onSnapshot((doc) => callback(doc.exists ? callFromDoc(doc) : null));
+  let cancelled = false;
+
+  const refresh = async () => {
+    const { data, error } = await supabase.from('calls').select('*').eq('id', callId).maybeSingle();
+    if (cancelled) return;
+    callback(error || !data ? null : callFromRow(data));
+  };
+
+  refresh();
+
+  const channel = supabase
+    .channel(`call:${callId}`)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls', filter: `id=eq.${callId}` }, refresh)
+    .subscribe();
+
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
 }
 
-export async function addIceCandidate(
-  callId: string,
-  subcollection: typeof CALLER_CANDIDATES | typeof CALLEE_CANDIDATES,
-  candidate: unknown
-): Promise<void> {
-  await firestoreDb.collection('calls').doc(callId).collection(subcollection).add(candidate as object);
+export async function addIceCandidate(callId: string, senderId: string, candidate: unknown): Promise<void> {
+  const { error } = await supabase
+    .from('call_candidates')
+    .insert({ call_id: callId, sender_id: senderId, candidate: candidate as Record<string, unknown> });
+  if (error) throw error;
 }
 
+/** Delivers every candidate from the *other* participant — an initial catch-up
+ * fetch (for candidates sent before we subscribed) plus live inserts after. */
 export function subscribeToIceCandidates(
   callId: string,
-  subcollection: typeof CALLER_CANDIDATES | typeof CALLEE_CANDIDATES,
-  onCandidate: (candidate: FirebaseFirestoreTypes.DocumentData) => void
+  myUid: string,
+  onCandidate: (candidate: Record<string, unknown>) => void
 ) {
-  return firestoreDb
-    .collection('calls')
-    .doc(callId)
-    .collection(subcollection)
-    .onSnapshot((snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') onCandidate(change.doc.data());
-      });
+  let cancelled = false;
+  const seen = new Set<string>();
+
+  const emit = (row: CandidateRow) => {
+    if (row.sender_id === myUid || seen.has(row.id)) return;
+    seen.add(row.id);
+    onCandidate(row.candidate);
+  };
+
+  supabase
+    .from('call_candidates')
+    .select('*')
+    .eq('call_id', callId)
+    .then(({ data, error }) => {
+      if (error || cancelled) return;
+      (data ?? []).forEach(emit);
     });
+
+  const channel = supabase
+    .channel(`call-candidates:${callId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'call_candidates', filter: `call_id=eq.${callId}` },
+      (payload) => emit(payload.new as CandidateRow)
+    )
+    .subscribe();
+
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
 }
 
-/** Rings the current user whenever a new call document targets them. */
+/** Rings the current user whenever a new call targets them. */
 export function subscribeToIncomingCalls(uid: string, onIncoming: (call: Call) => void) {
-  return firestoreDb
-    .collection('calls')
-    .where('calleeId', '==', uid)
-    .where('status', '==', 'ringing')
-    .onSnapshot((snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') onIncoming(callFromDoc(change.doc));
-      });
-    });
+  const channel = supabase
+    .channel(`incoming-calls:${uid}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'calls', filter: `callee_id=eq.${uid}` },
+      (payload) => {
+        const row = payload.new as CallRow;
+        if (row.status === 'ringing') onIncoming(callFromRow(row));
+      }
+    )
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
 }

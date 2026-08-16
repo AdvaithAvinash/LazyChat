@@ -13,11 +13,11 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { createOrUpdateUserProfile } from '@/services/authService';
 import { pickImageFromLibrary } from '@/services/mediaPickerService';
-import { uploadToCloudinary } from '@/services/storageService';
+import { uploadToStorage } from '@/services/storageService';
 import { colors } from '@/theme/colors';
 
 export default function ProfileSetupScreen() {
-  const { firebaseUser, refreshProfile } = useAuth();
+  const { authUser, refreshProfile } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [about, setAbout] = useState('Hey there! I am using LazyChat.');
   const [photoURL, setPhotoURL] = useState<string | null>(null);
@@ -26,11 +26,12 @@ export default function ProfileSetupScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const handlePickPhoto = async () => {
+    if (!authUser) return;
     try {
       const file = await pickImageFromLibrary();
       if (!file) return;
       setUploadingPhoto(true);
-      const result = await uploadToCloudinary(file);
+      const result = await uploadToStorage(authUser.id, file);
       setPhotoURL(result.url);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload photo');
@@ -40,7 +41,7 @@ export default function ProfileSetupScreen() {
   };
 
   const handleSave = async () => {
-    if (!firebaseUser) return;
+    if (!authUser) return;
     if (displayName.trim().length < 2) {
       setError('Enter a display name (at least 2 characters)');
       return;
@@ -49,7 +50,7 @@ export default function ProfileSetupScreen() {
     setSaving(true);
     setError(null);
     try {
-      await createOrUpdateUserProfile(firebaseUser.uid, firebaseUser.phoneNumber ?? '', {
+      await createOrUpdateUserProfile(authUser.id, authUser.email ?? '', {
         displayName: displayName.trim(),
         about: about.trim(),
         photoURL,

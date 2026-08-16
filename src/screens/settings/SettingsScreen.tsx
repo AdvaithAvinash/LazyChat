@@ -8,10 +8,10 @@ import { unregisterPushNotifications } from '@/services/notificationService';
 import { colors } from '@/theme/colors';
 
 export default function SettingsScreen() {
-  const { profile, firebaseUser } = useAuth();
+  const { profile, authUser } = useAuth();
 
   const handleSignOut = async () => {
-    if (firebaseUser) await unregisterPushNotifications(firebaseUser.uid).catch(() => undefined);
+    if (authUser) await unregisterPushNotifications(authUser.id).catch(() => undefined);
     await signOut();
   };
 
@@ -25,7 +25,7 @@ export default function SettingsScreen() {
         <Avatar name={profile.displayName} photoURL={profile.photoURL} size={56} />
         <View style={styles.profileText}>
           <Text style={styles.name}>{profile.displayName}</Text>
-          <Text style={styles.phone}>{profile.phoneNumber}</Text>
+          <Text style={styles.phone}>{profile.email}</Text>
         </View>
       </View>
 

@@ -22,7 +22,7 @@ import type { MainStackParamList } from '@/navigation/types';
 import { markMessagesRead, sendMessage, subscribeToMessages } from '@/services/messageService';
 import { subscribeToChat } from '@/services/chatService';
 import { pickDocument, pickImageFromLibrary } from '@/services/mediaPickerService';
-import { uploadToCloudinary } from '@/services/storageService';
+import { uploadToStorage } from '@/services/storageService';
 import { colors } from '@/theme/colors';
 import type { Chat, Message } from '@/types';
 
@@ -55,7 +55,7 @@ export default function ChatRoomScreen() {
     if (!profile || messages.length === 0) return;
     const unread = messages.filter((m) => m.senderId !== profile.uid && !m.readBy.includes(profile.uid));
     if (unread.length > 0) {
-      markMessagesRead(chatId, profile.uid, unread.map((m) => m.id)).catch(() => undefined);
+      markMessagesRead(chatId, unread.map((m) => m.id)).catch(() => undefined);
     }
   }, [messages, profile, chatId]);
 
@@ -65,7 +65,7 @@ export default function ChatRoomScreen() {
     setText('');
     setSending(true);
     try {
-      await sendMessage({ chatId, senderId: profile.uid, type: 'text', text: value }, chat);
+      await sendMessage({ chatId, senderId: profile.uid, type: 'text', text: value });
     } finally {
       setSending(false);
     }
@@ -75,7 +75,7 @@ export default function ChatRoomScreen() {
     if (!profile || !chat) return;
     const file = await pickImageFromLibrary();
     if (!file) return;
-    await uploadAndSend(file, 'image', chat);
+    await uploadAndSend(file, 'image');
   };
 
   const handleAttachFile = async () => {
@@ -83,29 +83,25 @@ export default function ChatRoomScreen() {
     const file = await pickDocument();
     if (!file) return;
     const type = file.mimeType.startsWith('video/') ? 'video' : 'file';
-    await uploadAndSend(file, type, chat);
+    await uploadAndSend(file, type);
   };
 
   const uploadAndSend = async (
     file: { uri: string; name: string; mimeType: string },
-    type: 'image' | 'video' | 'file',
-    activeChat: Chat
+    type: 'image' | 'video' | 'file'
   ) => {
     if (!profile) return;
     setUploading(true);
     try {
-      const result = await uploadToCloudinary(file);
-      await sendMessage(
-        {
-          chatId,
-          senderId: profile.uid,
-          type,
-          mediaUrl: result.url,
-          mediaType: result.mimeType,
-          fileName: file.name,
-        },
-        activeChat
-      );
+      const result = await uploadToStorage(profile.uid, file);
+      await sendMessage({
+        chatId,
+        senderId: profile.uid,
+        type,
+        mediaUrl: result.url,
+        mediaType: result.mimeType,
+        fileName: file.name,
+      });
     } finally {
       setUploading(false);
     }
